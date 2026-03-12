@@ -33,7 +33,8 @@ CarbonX replaces the manual pipeline with an automated on-chain issuance system:
 - 🪪 **KYC Verification** — Two-tier identity flow (individual + company) with document references, admin review, and status gating before market access
 - 🔔 **Notifications + Audit Trail** — Every credit state change (`minted → listed → sold → retired`) is logged in `credit_history`; users receive typed notifications
 - 🎭 **Role-Based Dashboards** — Four distinct UIs (Producer, Investor, Verifier, Corporate) rendered from a single Zustand-driven state machine
-- 📋 **PDD Proposal Workflow** — Producers submit Project Design Documents with sensor data; verifiers approve/reject → triggers on-chain mint on approval
+- � **IPFS Metadata Pinning** — NFT metadata is pinned to IPFS via Pinata (`pinJSONToIPFS`); returns a permanent CID linked to each carbon credit token
+- �📋 **PDD Proposal Workflow** — Producers submit Project Design Documents with sensor data; verifiers approve/reject → triggers on-chain mint on approval
 
 ---
 
@@ -49,15 +50,15 @@ CarbonX replaces the manual pipeline with an automated on-chain issuance system:
 │           Express.js REST API  (:5000)                  │
 │  /users  /kyc  /proposals  /verification                │
 │  /marketplace  /history  /notifications                 │
-└──────┬──────────────────────────┬───────────────────────┘
-       │ Supabase SDK             │ ethers.js v6
-┌──────▼──────────────┐   ┌──────▼──────────────────────┐
-│  Supabase PostgreSQL│   │   Hardhat EVM  (:8545)      │
-│  10 tables          │   │   CarbonCreditNFT (ERC-721) │
-│  UUID PKs + enums   │   │   MarketplaceEscrow         │
-│  pgcrypto ext.      │   │   ↑ Event Listener          │
-└─────────────────────┘   │   (CreditSold → DB sync)    │
-                          └─────────────────────────────┘
+└──────┬──────────────┬───────────────┬───────────────────┘
+       │ Supabase SDK │ ethers.js v6  │ Pinata API
+┌──────▼──────────┐ ┌─▼─────────────────────┐ ┌──▼──────────┐
+│ Supabase (PgSQL)│ │  Hardhat EVM (:8545)  │ │ IPFS/Pinata │
+│ 11 tables       │ │  CarbonCreditNFT      │ │ NFT metadata│
+│ UUID + enums    │ │  MarketplaceEscrow    │ │ pinning     │
+│ pgcrypto ext.   │ │  ↑ Event Listener     │ └─────────────┘
+└─────────────────┘ │  (CreditSold→DB sync) │
+                    └───────────────────────┘
 ```
 
 ### 🧰 Tech Stack
@@ -69,6 +70,7 @@ CarbonX replaces the manual pipeline with an automated on-chain issuance system:
 | Database | Supabase (PostgreSQL) — 10 tables, pgcrypto, typed ENUMs |
 | Blockchain | Hardhat v2, Solidity 0.8.27, OpenZeppelin v5 (ERC-721 + Ownable) |
 | Smart Contracts | `CarbonCreditNFT` (ERC-721) · `MarketplaceEscrow` |
+| Storage | Pinata (IPFS) — NFT metadata pinning |
 
 ---
 
