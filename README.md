@@ -88,7 +88,7 @@ git clone https://github.com/naithick/caffeine.git && cd caffeine
 # 2. Create .env in the project root (see Environment Setup below)
 
 # 3. Set up the database (Supabase SQL Editor)
-#    Run schema.sql → then schema_additions.sql → then seed_data.sql (optional)
+#    Run schema.sql (creates all tables + inserts demo data)
 
 # 4. One-command launch
 chmod +x start.sh
@@ -130,9 +130,7 @@ chmod +x start.sh
 │   ├── components/                # 20+ React components per role
 │   └── lib/                       # Zustand store, types, utilities
 ├── scripts/deploy.js              # Contract deployment script
-├── schema.sql                     # Core DB schema (7 tables + ENUMs)
-├── schema_additions.sql           # KYC, credit_history, notifications (3 tables)
-├── seed_data.sql                  # Demo data
+├── schema.sql                     # Complete DB schema (11 tables + ENUMs + seed data)
 ├── start.sh                       # One-click full-stack launcher
 └── hardhat.config.js
 ```
@@ -165,31 +163,9 @@ await supabase.from("carbon_credits").insert({
 
 ---
 
-## 📡 API Endpoints
+## 📡 API Reference
 
-| Method | Endpoint | Description |
-|---|---|---|
-| `GET` | `/api/health` | Server health + uptime |
-| `POST` | `/api/users/auth` | Authenticate / register via wallet address |
-| `POST` | `/api/kyc/submit` | Submit KYC verification request |
-| `GET` | `/api/kyc/:userId` | Get KYC status for a user |
-| `POST` | `/api/kyc/review` | Admin approves / rejects KYC |
-| `POST` | `/api/proposals` | Submit a new PDD proposal |
-| `GET` | `/api/proposals` | List all proposals |
-| `POST` | `/api/verification/review` | Certifier decision → mints NFT on approval |
-| `POST` | `/api/verification/auto` | MRV Oracle auto-verification + mint |
-| `POST` | `/api/marketplace/sell` | Create a sell order |
-| `GET` | `/api/marketplace/sell` | List open sell orders |
-| `POST` | `/api/marketplace/buy` | Place a buy order (triggers matching engine) |
-| `GET` | `/api/marketplace/buy` | List open buy orders |
-| `POST` | `/api/marketplace/retire` | Burn / retire a carbon credit NFT |
-| `POST` | `/api/history` | Log a credit lifecycle event |
-| `GET` | `/api/history/credit/:creditId` | Full lifecycle history for one credit |
-| `GET` | `/api/history/user/:userId` | All credit events for a user |
-| `GET` | `/api/notifications/:userId` | Get user notifications |
-| `POST` | `/api/notifications` | Create a notification |
-| `PATCH` | `/api/notifications/:id/read` | Mark notification as read |
-| `DELETE` | `/api/notifications/:id` | Delete a notification |
+See [`BACKEND_API_REFERENCE.md`](BACKEND_API_REFERENCE.md) for the full list of endpoints with request/response examples.
 
 ---
 
@@ -215,9 +191,8 @@ RPC_URL=http://127.0.0.1:8545
 ```
 
 **Database setup (Supabase SQL Editor):**
-1. Run [`schema.sql`](schema.sql) — core tables + ENUMs
-2. Run [`schema_additions.sql`](schema_additions.sql) — KYC, credit_history, notifications
-3. *(Optional)* Run [`seed_data.sql`](seed_data.sql) — demo accounts + sample credits
+
+Run [`schema.sql`](schema.sql) — creates all 11 tables, ENUMs, triggers, and inserts demo data.
 
 **Demo accounts (after seeding):**
 

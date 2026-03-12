@@ -1,11 +1,8 @@
 -- =============================================================================
--- Carbon Credit Lifecycle & Trading Platform — Supabase PostgreSQL Schema
+-- CarbonX — Complete Supabase PostgreSQL Schema + Demo Seed Data
 -- =============================================================================
--- Hybrid Web2.5 architecture: off-chain application layer (this schema)
--- backed by on-chain settlement via smart contracts on Ethereum.
---
--- SECURITY MODEL: No Row Level Security. All authorization is enforced by
--- the Node.js backend, which connects using the Supabase Service Role Key.
+-- Paste this entire file in the Supabase SQL Editor to set up the database.
+-- Creates all tables, enums, indexes, triggers, and demo data in one go.
 -- =============================================================================
 
 -- Extensions
@@ -47,12 +44,14 @@ CREATE TYPE trade_status AS ENUM (
     'failed'
 );
 
+CREATE TYPE kyc_status AS ENUM ('pending', 'in_review', 'verified', 'rejected');
+CREATE TYPE account_type AS ENUM ('individual', 'company');
+CREATE TYPE notification_type AS ENUM ('success', 'info', 'warning');
+CREATE TYPE history_action AS ENUM ('minted', 'listed', 'sold', 'purchased', 'retired', 'burned', 'revoked');
+
 -- =============================================================================
--- 1. USERS — Web3 wallet identity mapping
+-- 1. USERS
 -- =============================================================================
--- Maps 42-character hex wallet addresses (0x + 40 hex chars) to user profiles
--- and roles. Each user authenticates via a Web3 wallet (e.g., MetaMask) and
--- is assigned one of three roles: Producer, Buyer, or Certification Body.
 
 CREATE TABLE users (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -69,18 +68,15 @@ CREATE TABLE users (
 CREATE INDEX idx_users_role ON users (role);
 
 -- =============================================================================
--- 2. CERTIFICATION BODIES — Accredited third-party verifiers
+-- 2. CERTIFICATION BODIES
 -- =============================================================================
--- Registered in a dedicated Certifier Registry. Accredited by regulatory
--- authorities (UNFCCC, ICVCM, ETS-EU, PACM, etc.). On-chain registry address
--- references the smart contract Certifier Registry.
 
 CREATE TABLE certification_bodies (
     id                        UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id                   UUID NOT NULL,
     organization_name         TEXT NOT NULL,
-    accreditation_authority   TEXT NOT NULL,   -- e.g. 'UNFCCC', 'ICVCM', 'ETS-EU'
-    registry_contract_address TEXT,            -- on-chain Certifier Registry address
+    accreditation_authority   TEXT NOT NULL,
+    registry_contract_address TEXT,
     is_active                 BOOLEAN NOT NULL DEFAULT true,
     created_at                TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at                TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -92,12 +88,8 @@ CREATE TABLE certification_bodies (
 CREATE INDEX idx_cb_active ON certification_bodies (is_active) WHERE is_active = true;
 
 -- =============================================================================
--- 3. PROPOSALS — Producer credit-minting proposals
+-- 3. PROPOSALS
 -- =============================================================================
--- Producers create proposals containing background work, due diligence,
--- financial history, ownership record, proof of intent, and proof of value.
--- sensor_data stores IoT environmental sensing readings as JSONB.
--- supporting_documents stores financial history, ownership records, approvals.
 
 CREATE TABLE proposals (
     id                      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -106,10 +98,10 @@ CREATE TABLE proposals (
     description             TEXT,
     commodity_type          TEXT NOT NULL DEFAULT 'carbon_credit',
     credit_quantity         INTEGER NOT NULL CHECK (credit_quantity > 0),
-    supporting_documents    JSONB,   -- financial history, ownership records, approvals
+    supporting_documents    JSONB,
     proof_of_intent         TEXT,
     proof_of_value          TEXT,
-    sensor_data             JSONB,   -- IoT environmental sensing data
+    sensor_data             JSONB,
     status                  proposal_status NOT NULL DEFAULT 'draft',
     submitted_at            TIMESTAMPTZ,
     created_at              TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -124,10 +116,8 @@ CREATE INDEX idx_proposals_submitted ON proposals (submitted_at)
     WHERE status = 'submitted';
 
 -- =============================================================================
--- 4. PROPOSAL REVIEWS — Human-in-the-loop certification decisions
+-- 4. PROPOSAL REVIEWS
 -- =============================================================================
--- Certification bodies review proposals in a verification dashboard and
--- record an approve or reject decision with remarks.
 
 CREATE TABLE proposal_reviews (
     id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -145,21 +135,16 @@ CREATE INDEX idx_reviews_proposal  ON proposal_reviews (proposal_id);
 CREATE INDEX idx_reviews_certifier ON proposal_reviews (certifier_id);
 
 -- =============================================================================
--- 5. CARBON CREDITS — Tokenized NFT-backed credits
+-- 5. CARBON CREDITS
 -- =============================================================================
--- Each credit represents one metric ton of CO2 equivalent, mapped to an NFT.
--- Minted upon proposal approval. Metadata includes approved proposal identifier,
--- supporting documents, and on-chain transaction history references.
--- Credits follow the lifecycle: minted → listed → transferred → retired.
--- Revocation is supported for credits later deemed invalid.
 
 CREATE TABLE carbon_credits (
     id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     proposal_id       UUID NOT NULL,
     owner_id          UUID NOT NULL,
-    token_id          TEXT,           -- on-chain NFT token ID
-    contract_address  TEXT,           -- smart contract address (ERC-721 / ERC-1155)
-    metadata          JSONB,         -- NFT metadata: creation, approval, transfer history refs
+    token_id          TEXT,
+    contract_address  TEXT,
+    metadata          JSONB,
     status            credit_status NOT NULL DEFAULT 'minted',
     minted_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
     retired_at        TIMESTAMPTZ,
@@ -177,12 +162,8 @@ CREATE INDEX idx_credits_token    ON carbon_credits (token_id)
     WHERE token_id IS NOT NULL;
 
 -- =============================================================================
--- 6. SELL ORDERS — NFT listings on the off-chain order book
+-- 6. SELL ORDERS
 -- =============================================================================
--- Created when an owner lists a credit for sale. Contains NFT info, owner
--- address, transaction preferences, and metadata attributes for the Order
--- Matching System. Price is denominated in ETH (18 decimal places for WEI
--- precision).
 
 CREATE TABLE sell_orders (
     id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -205,20 +186,17 @@ CREATE INDEX idx_sell_orders_open   ON sell_orders (asking_price_eth ASC, listed
     WHERE status = 'open';
 
 -- =============================================================================
--- 7. BUY ORDERS — Buyer bids on the off-chain order book
+-- 7. BUY ORDERS
 -- =============================================================================
--- Created when a buyer places a bid on a specific NFT-backed carbon credit.
--- Contains bid price, quantity, and buyer preferences. ETH is locked in an
--- on-chain escrow account; escrow_tx_hash references that locking transaction.
 
 CREATE TABLE buy_orders (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     buyer_id        UUID NOT NULL,
-    credit_id       UUID NOT NULL,    -- target NFT asset the buyer is bidding on
+    credit_id       UUID NOT NULL,
     bid_price_eth   NUMERIC(38, 18) NOT NULL CHECK (bid_price_eth > 0),
     quantity        INTEGER NOT NULL DEFAULT 1 CHECK (quantity > 0),
     status          order_status NOT NULL DEFAULT 'open',
-    escrow_tx_hash  TEXT,            -- on-chain escrow locking transaction hash
+    escrow_tx_hash  TEXT,
     placed_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
     created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -233,11 +211,8 @@ CREATE INDEX idx_buy_orders_open   ON buy_orders (credit_id, bid_price_eth DESC,
     WHERE status = 'open';
 
 -- =============================================================================
--- 8. TRADES — Order matches and execution records
+-- 8. TRADES
 -- =============================================================================
--- Records each match produced by the off-chain Order Matching System
--- (Price-Time priority). Tracks execution status from match through
--- on-chain settlement.
 
 CREATE TABLE trades (
     id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -247,7 +222,7 @@ CREATE TABLE trades (
     execution_price_eth NUMERIC(38, 18) NOT NULL CHECK (execution_price_eth > 0),
     quantity            INTEGER NOT NULL DEFAULT 1 CHECK (quantity > 0),
     status              trade_status NOT NULL DEFAULT 'matched',
-    settlement_tx_hash  TEXT,        -- on-chain settlement transaction hash
+    settlement_tx_hash  TEXT,
     matched_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
     settled_at          TIMESTAMPTZ,
 
@@ -262,7 +237,85 @@ CREATE INDEX idx_trades_credit ON trades (credit_id);
 CREATE INDEX idx_trades_status ON trades (status);
 
 -- =============================================================================
--- UPDATED_AT TRIGGER — auto-update timestamps on row modification
+-- 9. KYC VERIFICATIONS
+-- =============================================================================
+
+CREATE TABLE kyc_verifications (
+    id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id               UUID NOT NULL,
+    account_type          account_type NOT NULL DEFAULT 'individual',
+    full_name             TEXT,
+    company_name          TEXT,
+    registration_number   TEXT,
+    email                 TEXT NOT NULL,
+    country               TEXT NOT NULL,
+    primary_doc_url       TEXT,
+    primary_doc_type      TEXT,
+    secondary_doc_url     TEXT,
+    secondary_doc_type    TEXT,
+    status                kyc_status NOT NULL DEFAULT 'pending',
+    reviewed_by           UUID,
+    reviewed_at           TIMESTAMPTZ,
+    rejection_reason      TEXT,
+    created_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
+
+    CONSTRAINT fk_kyc_user       FOREIGN KEY (user_id)     REFERENCES users (id),
+    CONSTRAINT fk_kyc_reviewer   FOREIGN KEY (reviewed_by) REFERENCES users (id),
+    CONSTRAINT chk_kyc_individual CHECK (
+        account_type != 'individual' OR full_name IS NOT NULL
+    ),
+    CONSTRAINT chk_kyc_company CHECK (
+        account_type != 'company' OR (company_name IS NOT NULL AND registration_number IS NOT NULL)
+    )
+);
+
+CREATE INDEX idx_kyc_user   ON kyc_verifications (user_id);
+CREATE INDEX idx_kyc_status ON kyc_verifications (status);
+
+-- =============================================================================
+-- 10. CREDIT HISTORY
+-- =============================================================================
+
+CREATE TABLE credit_history (
+    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    credit_id   UUID NOT NULL,
+    action      history_action NOT NULL,
+    actor_id    UUID NOT NULL,
+    price_eth   NUMERIC(38, 18),
+    tx_hash     TEXT,
+    metadata    JSONB,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+
+    CONSTRAINT fk_history_credit FOREIGN KEY (credit_id) REFERENCES carbon_credits (id),
+    CONSTRAINT fk_history_actor  FOREIGN KEY (actor_id)  REFERENCES users (id)
+);
+
+CREATE INDEX idx_history_credit ON credit_history (credit_id);
+CREATE INDEX idx_history_actor  ON credit_history (actor_id);
+CREATE INDEX idx_history_action ON credit_history (action);
+
+-- =============================================================================
+-- 11. NOTIFICATIONS
+-- =============================================================================
+
+CREATE TABLE notifications (
+    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id     UUID NOT NULL,
+    message     TEXT NOT NULL,
+    type        notification_type NOT NULL DEFAULT 'info',
+    is_read     BOOLEAN NOT NULL DEFAULT false,
+    link        TEXT,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+
+    CONSTRAINT fk_notif_user FOREIGN KEY (user_id) REFERENCES users (id)
+);
+
+CREATE INDEX idx_notif_user    ON notifications (user_id);
+CREATE INDEX idx_notif_unread  ON notifications (user_id, is_read) WHERE is_read = false;
+
+-- =============================================================================
+-- UPDATED_AT TRIGGERS
 -- =============================================================================
 
 CREATE OR REPLACE FUNCTION set_updated_at()
@@ -274,48 +327,76 @@ END;
 $$ LANGUAGE plpgsql;
 
 CREATE TRIGGER trg_users_updated_at
-    BEFORE UPDATE ON users
-    FOR EACH ROW EXECUTE FUNCTION set_updated_at();
-
+    BEFORE UPDATE ON users FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 CREATE TRIGGER trg_certification_bodies_updated_at
-    BEFORE UPDATE ON certification_bodies
-    FOR EACH ROW EXECUTE FUNCTION set_updated_at();
-
+    BEFORE UPDATE ON certification_bodies FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 CREATE TRIGGER trg_proposals_updated_at
-    BEFORE UPDATE ON proposals
-    FOR EACH ROW EXECUTE FUNCTION set_updated_at();
-
+    BEFORE UPDATE ON proposals FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 CREATE TRIGGER trg_carbon_credits_updated_at
-    BEFORE UPDATE ON carbon_credits
-    FOR EACH ROW EXECUTE FUNCTION set_updated_at();
-
+    BEFORE UPDATE ON carbon_credits FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 CREATE TRIGGER trg_sell_orders_updated_at
-    BEFORE UPDATE ON sell_orders
-    FOR EACH ROW EXECUTE FUNCTION set_updated_at();
-
+    BEFORE UPDATE ON sell_orders FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 CREATE TRIGGER trg_buy_orders_updated_at
-    BEFORE UPDATE ON buy_orders
-    FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+    BEFORE UPDATE ON buy_orders FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+CREATE TRIGGER trg_kyc_updated_at
+    BEFORE UPDATE ON kyc_verifications FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
 -- =============================================================================
--- PRECISION DOCUMENTATION — NUMERIC(38,18) ETH columns
--- =============================================================================
--- These columns store ETH values with WEI-level precision (18 decimal places).
--- JavaScript's IEEE 754 Number type loses precision beyond 2^53.
--- Backend and frontend code MUST parse these using ethers.js or BigInt.
+-- DEMO SEED DATA
 -- =============================================================================
 
-COMMENT ON COLUMN sell_orders.asking_price_eth IS
-    'ETH price with 18 decimal places (WEI precision). '
-    'FRONTEND WARNING: Parse with ethers.parseEther() / ethers.formatEther() '
-    'or BigInt. Do NOT cast to JavaScript Number — IEEE 754 loses precision beyond 2^53.';
+INSERT INTO users (id, wallet_address, display_name, role) VALUES
+  ('aaaa0001-0001-0001-0001-000000000001', '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'GreenForest Corp', 'producer'),
+  ('aaaa0002-0002-0002-0002-000000000002', '0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb', 'EcoTrade Investments', 'buyer'),
+  ('aaaa0003-0003-0003-0003-000000000003', '0xcccccccccccccccccccccccccccccccccccccccc', 'ITP Auditor Group', 'certification_body'),
+  ('aaaa0004-0004-0004-0004-000000000004', '0xdddddddddddddddddddddddddddddddddddddddd', 'CarbonNeutral Industries', 'buyer')
+ON CONFLICT (wallet_address) DO NOTHING;
 
-COMMENT ON COLUMN buy_orders.bid_price_eth IS
-    'ETH price with 18 decimal places (WEI precision). '
-    'FRONTEND WARNING: Parse with ethers.parseEther() / ethers.formatEther() '
-    'or BigInt. Do NOT cast to JavaScript Number — IEEE 754 loses precision beyond 2^53.';
+INSERT INTO kyc_verifications (user_id, account_type, company_name, registration_number, email, country, status, reviewed_at) VALUES
+  ('aaaa0001-0001-0001-0001-000000000001', 'company', 'GreenForest Corp', 'CIN-2024-GF001', 'admin@greenforest.io', 'India', 'verified', now()),
+  ('aaaa0002-0002-0002-0002-000000000002', 'company', 'EcoTrade Investments', 'CIN-2024-ET002', 'trade@ecotrade.com', 'Singapore', 'verified', now()),
+  ('aaaa0003-0003-0003-0003-000000000003', 'company', 'VerraAudit Labs', 'CIN-2024-VA003', 'audit@verraaudit.org', 'Switzerland', 'verified', now()),
+  ('aaaa0004-0004-0004-0004-000000000004', 'company', 'CarbonNeutral Industries', 'CIN-2024-CN004', 'ops@carbonneutral.co', 'Germany', 'verified', now());
 
-COMMENT ON COLUMN trades.execution_price_eth IS
-    'ETH price with 18 decimal places (WEI precision). '
-    'FRONTEND WARNING: Parse with ethers.parseEther() / ethers.formatEther() '
-    'or BigInt. Do NOT cast to JavaScript Number — IEEE 754 loses precision beyond 2^53.';
+INSERT INTO proposals (id, producer_id, title, description, commodity_type, credit_quantity, sensor_data, status, submitted_at) VALUES
+  (
+    'pppp0001-0001-0001-0001-000000000001',
+    'aaaa0001-0001-0001-0001-000000000001',
+    'Amazon Reforestation Plot B — 500 Ton Batch',
+    'Large-scale native species reforestation across 200 hectares in the Amazon basin.',
+    'carbon_credit', 500,
+    '{"device_id": "IOT-AMAZON-B1", "co2_sequestered_tons": 500, "temperature_c": 28, "humidity_pct": 89, "ndvi_score": 0.82, "recorded_at": "2026-03-10T12:00:00Z"}'::jsonb,
+    'submitted', now() - interval '2 days'
+  ),
+  (
+    'pppp0002-0002-0002-0002-000000000002',
+    'aaaa0001-0001-0001-0001-000000000001',
+    'Western Ghats Mangrove Restoration',
+    'Coastal mangrove rehabilitation covering 50 hectares along the Karnataka coastline.',
+    'carbon_credit', 150,
+    '{"device_id": "IOT-MNGV-K2", "co2_sequestered_tons": 150, "temperature_c": 31, "humidity_pct": 92, "ndvi_score": 0.71, "recorded_at": "2026-03-10T14:30:00Z"}'::jsonb,
+    'submitted', now() - interval '1 day'
+  ),
+  (
+    'pppp0003-0003-0003-0003-000000000003',
+    'aaaa0001-0001-0001-0001-000000000001',
+    'Rajasthan Solar Cookstove Distribution',
+    'Distribution of 2000 efficient solar cookstoves across rural Rajasthan communities.',
+    'carbon_credit', 80,
+    '{"device_id": "IOT-COOK-R3", "co2_sequestered_tons": 80, "temperature_c": 35, "humidity_pct": 25, "ndvi_score": 0.45, "recorded_at": "2026-03-11T08:00:00Z"}'::jsonb,
+    'submitted', now()
+  );
+
+INSERT INTO notifications (user_id, message, type) VALUES
+  ('aaaa0001-0001-0001-0001-000000000001', 'Your KYC verification has been approved.', 'success'),
+  ('aaaa0001-0001-0001-0001-000000000001', 'Proposal "Amazon Reforestation Plot B" is pending VVB review.', 'info'),
+  ('aaaa0003-0003-0003-0003-000000000003', '3 proposals are awaiting your review.', 'warning'),
+  ('aaaa0002-0002-0002-0002-000000000002', 'Welcome to CarbonX marketplace. Browse available credits.', 'info');
+
+-- =============================================================================
+-- Demo accounts:
+--   Producer  : admin@greenforest.io
+--   Investor  : trade@ecotrade.com
+--   Verifier  : audit@verraaudit.org
+--   Investor 2: ops@carbonneutral.co
+-- =============================================================================
