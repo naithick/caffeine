@@ -1,0 +1,64 @@
+# ── Environment & Secrets ──────────────────────────────────
+.env
+.env.*
+.env.local
+.env.*.local
+*.pem
+*.key
+*.secret
+
+# ── Node.js ────────────────────────────────────────────────
+node_modules/
+frontend/node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+package-lock.json
+
+# ── Hardhat ────────────────────────────────────────────────
+artifacts/
+cache/
+typechain-types/
+
+# ── Frontend (separate repo / not included) ───────────────
+frontend/
+
+# ── Build outputs ──────────────────────────────────────────
+dist/
+build/
+out/
+
+# ── OS & Editor ────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+.vscode/settings.json
+.idea/
+*.swp
+*.swo
+
+# ── AI / Cline internal files ─────────────────────────────
+.clinerules
+.clineignore
+.agents/
+
+# ── Internal context / status docs (local only) ───────────
+foundathon-ppt-template.md
+DEMOCRATIZED CARBON CREDIT TRADING ON A BLOCKCHAIN PLATFORM (1).md
+active_status.md
+project_brief.md
+carbonx_export.zip
+hardhat.log
+
+# ── Test directories ───────────────────────────────────────
+test/
+tests/
+backend/test/
+backend/scripts/
+
+# ── Next.js build output ───────────────────────────────────
+frontend/.next/
+frontend/out/
+frontend/.turbo/
+
+# ── Ignition deployment artifacts (auto-generated) ─────────
+ignition/deployments/
