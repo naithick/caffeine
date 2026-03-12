@@ -20,10 +20,11 @@ artifacts/
 cache/
 typechain-types/
 
-# ── Frontend (separate repo / not included) ───────────────
-frontend/
-
-# ── Build outputs ──────────────────────────────────────────
+# ── Frontend build outputs (not source) ───────────────────
+frontend/.next/
+frontend/out/
+frontend/.turbo/
+frontend/node_modules/
 dist/
 build/
 out/
