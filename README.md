@@ -1,4 +1,4 @@
-# 🌿 CarbonX — Democratized Carbon Credit Trading
+# 🌿 CarbonX — Democratized Carbon Credit Trading by leveraging web3
 
 > **Tokenizing verified carbon credits as on-chain NFTs — from satellite data to settled trade in a single pipeline.**
 
